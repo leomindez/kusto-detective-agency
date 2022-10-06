@@ -1,0 +1,23 @@
+.execute database script <|
+// Create table for the books
+.create-merge table Books(rf_id:string, book_title:string, publish_date:long, author:string, language:string, number_of_pages:long, weight_gram:long)
+// Import data for books
+// (Used data is utilzing catalogue from https://github.com/internetarchive/openlibrary )
+.ingest into table Books ('https://kustodetectiveagency.blob.core.windows.net/digitown-books/books.csv.gz') with (ignoreFirstRecord=true)
+// Create table for the shelves
+.create-merge table Shelves (shelf:long, rf_ids:dynamic, total_weight:long) 
+// Import data for shelves
+.ingest into table Shelves ('https://kustodetectiveagency.blob.core.windows.net/digitown-books/shelves.csv.gz') with (ignoreFirstRecord=true)
+
+let book = toscalar(Books
+| where book_title == "De Revolutionibus Magnis Data"
+| project weight_gram);
+
+Shelves
+| mv-expand rf_ids
+| extend rf_id = tostring(rf_ids)
+| lookup  Books on rf_id
+| summarize weight = sum(weight_gram) by shelf
+| lookup  Shelves on shelf
+| project diff = total_weight  - weight, shelf, weight
+| where diff > book
